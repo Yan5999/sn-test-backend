@@ -51,4 +51,6 @@ export class PostEntity {
 
   likesCount?: number;
   commentsCount?: number;
+
+  isLikedByMe?: boolean;
 }

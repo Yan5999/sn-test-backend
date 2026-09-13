@@ -46,7 +46,10 @@ export class UserService {
   }
 
   public async findById(id: string): Promise<UserEntity> {
-    const user = await this.userRepository.findOne({ where: { id } });
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: { profile: { avatar: true } },
+    });
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
@@ -108,7 +111,11 @@ export class UserService {
     return user.profile;
   }
 
-  public async getPublicProfile(username: string, pagination: PaginationDto) {
+  public async getPublicProfile(
+    username: string,
+    pagination: PaginationDto,
+    currentUserId?: string,
+  ) {
     const user = await this.userRepository.findOne({
       where: { username },
       relations: { profile: { avatar: true } },
@@ -116,19 +123,39 @@ export class UserService {
 
     if (!user) throw new NotFoundException('User not found.');
 
-    const [followersCount, followingCount, posts] = await Promise.all([
-      this.userRepository
-        .createQueryBuilder('u')
-        .innerJoin('u.following', 'target', 'target.id = :id', { id: user.id })
-        .getCount(),
-      this.userRepository
-        .createQueryBuilder('u')
-        .innerJoin('u.followers', 'source', 'source.id = :id', { id: user.id })
-        .getCount(),
-      this.postService.findByAuthor(user.id, pagination),
-    ]);
+    const [followersCount, followingCount, posts, followedByMeCount] =
+      await Promise.all([
+        this.userRepository
+          .createQueryBuilder('u')
+          .innerJoin('u.following', 'target', 'target.id = :id', {
+            id: user.id,
+          })
+          .getCount(),
+        this.userRepository
+          .createQueryBuilder('u')
+          .innerJoin('u.followers', 'source', 'source.id = :id', {
+            id: user.id,
+          })
+          .getCount(),
+        this.postService.findByAuthor(user.id, pagination, currentUserId),
+        currentUserId
+          ? this.userRepository
+              .createQueryBuilder('u')
+              .innerJoin('u.followers', 'f', 'f.id = :followerId', {
+                followerId: currentUserId,
+              })
+              .where('u.id = :targetId', { targetId: user.id })
+              .getCount()
+          : Promise.resolve(0),
+      ]);
 
-    return { user, followersCount, followingCount, posts };
+    return {
+      user,
+      followersCount,
+      followingCount,
+      posts,
+      isFollowedByMe: followedByMeCount > 0,
+    };
   }
 
   public async search({ query, limit, offset }: SearchUsersDto) {

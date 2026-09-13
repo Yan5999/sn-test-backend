@@ -78,8 +78,8 @@ export class PostController {
   @ApiResponse({ status: 200, description: 'Get all posts.' })
   @ApiResponse({ status: 401, description: 'Not authenticated.' })
   @Get()
-  public findAll(@Query() pagination: PaginationDto) {
-    return this.postService.findAll(pagination);
+  public findAll(@Query() pagination: PaginationDto, @Req() req: Request) {
+    return this.postService.findAll(pagination, req.user?.id);
   }
 
   @ApiOperation({ summary: 'Get a single post by id' })
@@ -87,8 +87,8 @@ export class PostController {
   @ApiResponse({ status: 400, description: 'Invalid uuid.' })
   @ApiResponse({ status: 404, description: 'Post not found.' })
   @Get(':id')
-  public findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.postService.findOne(id);
+  public findOne(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    return this.postService.findOne(id, req.user?.id);
   }
   @ApiOperation({ summary: 'Delete own post with its files' })
   @ApiCookieAuth()

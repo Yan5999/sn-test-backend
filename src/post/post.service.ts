@@ -40,11 +40,38 @@ export class PostService {
     return this.postRepository.save(post);
   }
 
-  public async findAll({ limit, offset }: PaginationDto) {
+  private async attachLikedFlag(posts: PostEntity[], currentUserId?: string) {
+    if (!posts.length) return;
+
+    if (!currentUserId) {
+      posts.forEach((post) => (post.isLikedByMe = false));
+      return;
+    }
+
+    const rows = await this.postRepository
+      .createQueryBuilder('post')
+      .select('post.id', 'id')
+      .innerJoin('post.likes', 'like')
+      .innerJoin('like.user', 'user', 'user.id = :currentUserId', {
+        currentUserId,
+      })
+      .where('post.id IN (:...ids)', { ids: posts.map((post) => post.id) })
+      .getRawMany<{ id: string }>();
+
+    const likedIds = new Set(rows.map((row) => row.id));
+
+    posts.forEach((post) => (post.isLikedByMe = likedIds.has(post.id)));
+  }
+
+  public async findAll(
+    { limit, offset }: PaginationDto,
+    currentUserId?: string,
+  ) {
     const [items, total] = await this.postRepository
       .createQueryBuilder('post')
       .leftJoinAndSelect('post.author', 'author')
       .leftJoinAndSelect('author.profile', 'profile')
+      .leftJoinAndSelect('profile.avatar', 'avatar')
       .leftJoinAndSelect('post.files', 'files')
       .loadRelationIdAndMap('post.likeIds', 'post.likes')
       .loadRelationIdAndMap('post.commentIds', 'post.comments')
@@ -58,28 +85,46 @@ export class PostService {
       post.commentsCount = post.commentIds?.length ?? 0;
     });
 
+    await this.attachLikedFlag(items, currentUserId);
+
     return { items, total, limit, offset };
   }
 
   public async findByAuthor(
     authorId: string,
     { limit, offset }: PaginationDto,
+    currentUserId?: string,
   ) {
-    const [items, total] = await this.postRepository.findAndCount({
-      where: { author: { id: authorId } },
-      order: { createdAt: 'DESC' },
-      take: limit,
-      skip: offset,
+    const [items, total] = await this.postRepository
+      .createQueryBuilder('post')
+      .leftJoinAndSelect('post.author', 'author')
+      .leftJoinAndSelect('author.profile', 'profile')
+      .leftJoinAndSelect('profile.avatar', 'avatar')
+      .leftJoinAndSelect('post.files', 'files')
+      .loadRelationIdAndMap('post.likeIds', 'post.likes')
+      .loadRelationIdAndMap('post.commentIds', 'post.comments')
+      .where('author.id = :authorId', { authorId })
+      .orderBy('post.createdAt', 'DESC')
+      .take(limit)
+      .skip(offset)
+      .getManyAndCount();
+
+    items.forEach((post) => {
+      post.likesCount = post.likeIds?.length ?? 0;
+      post.commentsCount = post.commentIds?.length ?? 0;
     });
+
+    await this.attachLikedFlag(items, currentUserId);
 
     return { items, total, limit, offset };
   }
 
-  public async findOne(id: string) {
+  public async findOne(id: string, currentUserId?: string) {
     const post = await this.postRepository
       .createQueryBuilder('post')
       .leftJoinAndSelect('post.author', 'author')
       .leftJoinAndSelect('author.profile', 'profile')
+      .leftJoinAndSelect('profile.avatar', 'avatar')
       .leftJoinAndSelect('post.files', 'files')
       .loadRelationIdAndMap('post.likeIds', 'post.likes')
       .loadRelationIdAndMap('post.commentIds', 'post.comments')
@@ -92,6 +137,8 @@ export class PostService {
 
     post.likesCount = post.likeIds?.length ?? 0;
     post.commentsCount = post.commentIds?.length ?? 0;
+
+    await this.attachLikedFlag([post], currentUserId);
 
     return post;
   }

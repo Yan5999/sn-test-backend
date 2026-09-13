@@ -41,7 +41,7 @@ export class CommentService {
   public async findByPost(postId: string, { limit, offset }: PaginationDto) {
     const [items, total] = await this.commentRepository.findAndCount({
       where: { post: { id: postId } },
-      relations: { author: { profile: true } },
+      relations: { author: { profile: { avatar: true } } },
       order: { createdAt: 'DESC' },
       take: limit,
       skip: offset,

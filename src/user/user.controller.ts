@@ -54,8 +54,13 @@ export class UserController {
   public getProfile(
     @Param('username') username: string,
     @Query() pagination: PaginationDto,
+    @Req() req: Request,
   ) {
-    return this.userService.getPublicProfile(username, pagination);
+    return this.userService.getPublicProfile(
+      username,
+      pagination,
+      req.user?.id,
+    );
   }
 
   @ApiOperation({ summary: 'Update own profile' })
